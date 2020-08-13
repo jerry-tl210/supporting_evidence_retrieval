@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 from typing import *
+from tqdm import tqdm
 
 from .std import *
 
@@ -13,7 +14,7 @@ class AttnExample:
     A single instance for attn_aggregate model.
     """
 
-    def __init__(self, documentSentences, question_str: str, sentences: List[str], sentence_mask: List[int], label):
+    def __init__(self, documentSentences, shint, question_str: str, sentences: List[str], sentence_mask: List[int], label):
         """
 
         :param question_str:
@@ -22,6 +23,7 @@ class AttnExample:
         :param label: the label of the middle sentence.
         """
         self.documentSentences = documentSentences
+        self.shint = shint
         self.question = question_str
         self.sentences = sentences
         self.sentence_mask = sentence_mask
@@ -42,22 +44,21 @@ class AttnExample:
 
 def data_preprocessing(data, sentence_window):
     out_examples = []
-    for document in data:
+    for document in tqdm(data):
         question = document['QUESTIONS'][0]
         question_str= question['QTEXT_CN']
-        shint =  question['SHINT_']
+        shint = question['SHINT_']
         if not shint: continue # eliminate question with no SE
         documentSentences = [s['text'] for s in document['SENTS']]
         for s_i, s in enumerate(documentSentences):
-            documentSentences.append(documentSentences[s_i])
             sentences = []
             sentence_masks = []
-            for j in range(s_i - sentence_window // 2, s_i + sentence_window // 2 + 2):
+            for j in range(s_i - sentence_window // 2, s_i + sentence_window // 2 + 1):
                 if j < 0 or j >= len(documentSentences):
                     sentences.append('[PAD]')
                     sentence_masks.append(1)
                 else:
-                    sentences.append(documentSentences[s_i])
+                    sentences.append(documentSentences[j])
                     sentence_masks.append(0)
 
             if s_i in shint:
@@ -65,7 +66,7 @@ def data_preprocessing(data, sentence_window):
             else:
                 label = 0
 
-            out_examples.append(AttnExample(documentSentences, question_str, sentences, sentence_masks, label))
+            out_examples.append(AttnExample(documentSentences, shint, question_str, sentences, sentence_masks, label))
 
     return out_examples
 
