@@ -65,7 +65,6 @@ def test_use_baseline(train_set, dev_set, model, lr, model_file_name):
 
 
 def test_train(lr, num_epochs, batch_size, model_file_name):
-    baseline_model =
     model = AttnAggregateModel()
 
     logger.info("Indexing train_set ...")
