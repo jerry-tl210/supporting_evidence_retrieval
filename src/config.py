@@ -11,4 +11,4 @@ FGC_DEV = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_dev.json"
 FGC_TRAIN = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_train.json"
 FGC_TEST = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_test.json"
 
-TRAINED_MODEL = RESULT_PATH / "trainedmodels"
+TRAINED_MODELS = RESULT_PATH / "trainedmodels"
