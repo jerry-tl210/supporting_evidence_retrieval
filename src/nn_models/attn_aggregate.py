@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-class baselineAgg(nn.Module):
+class AttnAggregateModel(nn.Module):
 
     def __init__(self, number_of_sentence, baseline_model):
 
-        super(baselineAgg, self).__init__()
+        super(AttnAggregateModel, self).__init__()
         self.number_of_sentence = number_of_sentence
         self.baseline = baseline_model
         self.softmax = nn.Softmax(dim=1)
@@ -13,10 +13,6 @@ class baselineAgg(nn.Module):
         self.linear = baseline_model.linear  # nn.Linear(768, 1)
 
     def forward_nn(self, batch, adjust_weight=False):
-        # batch = (batch_size, sentence length)
-        # pooler_output = (batch_size, 768)
-        # Sent objects into CUDA
-
         batch_size = batch['input_ids'].shape[0]
         max_sentence_length = batch['input_ids'].shape[2]
 
