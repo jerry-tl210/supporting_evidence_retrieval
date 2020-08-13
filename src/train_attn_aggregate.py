@@ -39,9 +39,6 @@ def main():
                         default=16,
                         type=int,
                         help='batch size')
-    parser.add_argument('-wiki_dir',
-                        default=config.HOTPOT_WIKI_ABS,
-                        help='/path/to/wiki_files')
     parser.add_argument('-model_file_name',
                         required=True,
                         help='output model_file_name')
