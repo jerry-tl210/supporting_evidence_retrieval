@@ -9,6 +9,7 @@ from . import config
 
 from .preprocess import AttnDataset
 
+
 from .nn_models.baseline import baseline_model
 from .nn_models.attn_aggregate import AttnAggregateModel
 
@@ -58,7 +59,13 @@ def main():
     elif args.cmd == 'train':
         train(args.lr, args.num_epochs, args.batch_size, args.model_file_name)
 
+def test_use_baseline(train_set, dev_set, model, lr, model_file_name):
+    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
+    trainer.train(10, 2)
+
+
 def test_train(lr, num_epochs, batch_size, model_file_name):
+    baseline_model =
     model = AttnAggregateModel()
 
     logger.info("Indexing train_set ...")

@@ -1,16 +1,20 @@
 import torch
 import torch.nn as nn
+from transformers import BertModel
 
 class AttnAggregateModel(nn.Module):
 
-    def __init__(self, number_of_sentence, baseline_model):
-
+    def __init__(self, number_of_sentence, trained_baseline_model=None):
         super(AttnAggregateModel, self).__init__()
         self.number_of_sentence = number_of_sentence
-        self.baseline = baseline_model
-        self.softmax = nn.Softmax(dim=1)
+
+        if trained_baseline_model:
+            self.bert = trained_baseline_model.bert
+            self.sp_linear = trained_baseline_model.linear
+        else:
+            self.bert = BertModel.from_pretrained('bert-base-chinese')
+            self.sp_linear = nn.Linear(768, 1)
         self.linearAgg = nn.Linear(1536, 1)
-        self.linear = baseline_model.linear  # nn.Linear(768, 1)
 
     def forward_nn(self, batch, adjust_weight=False):
         batch_size = batch['input_ids'].shape[0]
@@ -33,14 +37,14 @@ class AttnAggregateModel(nn.Module):
             target_pair = target_pair.expand(-1, self.number_of_sentence, -1)  # (batch, 3, 768)
             concatenated = torch.cat((target_pair, pooler_output), dim=-1)  # (batch, 3, 768*2)
             weight = self.linearAgg(concatenated)
-            weight = self.softmax(weight)
+            weight = self.softmax(weight, dim=1)
         else:
             weight = torch.tensor([[0.0], [1.0], [0.0]], device=device)
 
         aggregated_sentence = torch.matmul(weight.transpose(0, 1), pooler_output)  # (batch, 1, 768)
         aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
 
-        final_output = self.linear(aggregated_sentence)  # (batch, 1)
+        final_output = self.sp_linear(aggregated_sentence)  # (batch, 1)
 
         return final_output
 
