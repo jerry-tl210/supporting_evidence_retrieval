@@ -77,8 +77,8 @@ class AttnDataset(Dataset):
         :param json_fp: e.g, "FGC_release_1.7.13/FGC_release_all_train.json"
         """
         self.instances = []
-            data = json_load(json_fp)
-            examples: List[AttnExample] = data_preprocessing(data, 3)
+        data = json_load(json_fp)
+        examples: List[AttnExample] = data_preprocessing(data, 3)
 
         for e in examples:
             self.instances.append(e.convert2tensor())
