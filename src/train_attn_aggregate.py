@@ -87,7 +87,7 @@ def test_train(lr, num_epochs, batch_size, model_file_name):
 def train(lr, num_epochs, batch_size, model_file_name):
     baseline = BaselineModel()
     baseline.load_state_dict(torch.load('Models_SEs/model_epoch0_eval_em:0.180_precision:0.732_recall:0.454_f1:0.528_loss:0.246.m')) 
-    model = AttnAggregateModel()
+    model = AttnAggregateModel(3, baseline)
 
     logger.info("Indexing train_set ...")
     train_data = json_load(config.FGC_TRAIN)
