@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from transformers import BertModel
+import copy
+import torch.nn.functional as F
 
 class AttnAggregateModel(nn.Module):
 
@@ -25,7 +27,7 @@ class AttnAggregateModel(nn.Module):
         device = input_ids.device
         token_type_ids = batch['token_type_ids'].view(-1, max_sentence_length)
         attention_mask = batch['attention_mask'].view(-1, max_sentence_length)
-        hidden_state, pooler_output = self.baseline.bert(input_ids=input_ids,
+        hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                          attention_mask=attention_mask,
                                                          token_type_ids=token_type_ids)
 
@@ -37,11 +39,11 @@ class AttnAggregateModel(nn.Module):
             target_pair = target_pair.expand(-1, self.number_of_sentence, -1)  # (batch, 3, 768)
             concatenated = torch.cat((target_pair, pooler_output), dim=-1)  # (batch, 3, 768*2)
             weight = self.linearAgg(concatenated)
-            weight = self.softmax(weight, dim=1)
+            weight = F.softmax(weight, dim=1)
         else:
             weight = torch.tensor([[0.0], [1.0], [0.0]], device=device)
 
-        aggregated_sentence = torch.matmul(weight.transpose(0, 1), pooler_output)  # (batch, 1, 768)
+        aggregated_sentence = torch.matmul(weight.transpose(1, 2), pooler_output)  # (batch, 1, 768)
         aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
 
         final_output = self.sp_linear(aggregated_sentence)  # (batch, 1)
@@ -50,14 +52,12 @@ class AttnAggregateModel(nn.Module):
 
     def forward(self, batch):
 
-        output = self.forward_nn(batch)
+        output = self.forward_nn(batch, adjust_weight=True)
         labels = batch['label'].type(torch.float)
         loss_fn = nn.BCEWithLogitsLoss()
         loss = loss_fn(output, labels)
         # print("output:", output)
         # print("labels:", labels)
-        print("loss:", loss)
-
         return loss
 
     def _predict(self, batch):

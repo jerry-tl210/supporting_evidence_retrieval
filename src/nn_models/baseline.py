@@ -3,11 +3,11 @@ import torch.nn as nn
 from transformers import BertModel
 
 
-class baseline_model(nn.Module):
+class BaselineModel(nn.Module):
 
     def __init__(self):
 
-        super(baseline_model, self).__init__()
+        super(BaselineModel, self).__init__()
         self.bert = BertModel.from_pretrained('bert-base-chinese')
         self.linear = nn.Linear(768, 1)
 
@@ -25,6 +25,7 @@ class baseline_model(nn.Module):
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                 attention_mask=attention_mask,
                                                 token_type_ids=token_type_ids)
+        
         linear_output = self.linear(pooler_output)
 
         return linear_output
@@ -33,8 +34,7 @@ class baseline_model(nn.Module):
 
         loss_fn = nn.BCEWithLogitsLoss()
         output = self.forward(batch)
-        target = batch['labels'].float()
-
+        target = batch['label'].float()
         return loss_fn(output, target)
 
     def _predict(self, batch):

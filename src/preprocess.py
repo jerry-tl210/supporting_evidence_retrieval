@@ -8,7 +8,7 @@ from .std import *
 from transformers import BertTokenizer
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
-
+device = torch.device("cuda")
 class AttnExample:
     """
     A single instance for attn_aggregate model.
@@ -38,7 +38,10 @@ class AttnExample:
                               return_tensors='pt')
 
         tensor_inp['label'] = torch.tensor(self.label)
-
+        #tensor_inp['input_ids'] = tensor_inp['input_ids'].to(device)
+        #tensor_inp['attention_mask'] = tensor_inp['attention_mask'].to(device)
+        #tensor_inp['token_type_ids'] = tensor_inp['token_type_ids'].to(device)
+        #tensor_inp['label'] = tensor_inp['label'].to(device)
         return tensor_inp
 
 
@@ -62,9 +65,9 @@ def data_preprocessing(data, sentence_window):
                     sentence_masks.append(0)
 
             if s_i in shint:
-                label = 1
+                label = [1]
             else:
-                label = 0
+                label = [0]
 
             out_examples.append(AttnExample(documentSentences, shint, question_str, sentences, sentence_masks, label))
 
@@ -72,12 +75,11 @@ def data_preprocessing(data, sentence_window):
 
 
 class AttnDataset(Dataset):
-    def __init__(self, json_fp):
+    def __init__(self, data):
         """
         :param json_fp: e.g, "FGC_release_1.7.13/FGC_release_all_train.json"
         """
         self.instances = []
-        data = json_load(json_fp)
         examples: List[AttnExample] = data_preprocessing(data, 3)
 
         for e in examples:

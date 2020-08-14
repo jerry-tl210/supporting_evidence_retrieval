@@ -10,7 +10,7 @@ from . import config
 from .preprocess import AttnDataset
 
 
-from .nn_models.baseline import baseline_model
+from .nn_models.baseline import BaselineModel
 from .nn_models.attn_aggregate import AttnAggregateModel
 
 logger = logging.getLogger(__name__)
@@ -63,33 +63,40 @@ def test_use_baseline(train_set, dev_set, model, lr, model_file_name):
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
     trainer.train(10, 2)
 
-
 def test_train(lr, num_epochs, batch_size, model_file_name):
-    model = AttnAggregateModel()
+    baseline = BaselineModel()
+    baseline.load_state_dict(torch.load('Models_SEs/model_epoch0_eval_em:0.180_precision:0.732_recall:0.454_f1:0.528_loss:0.246.m'))
+    model = AttnAggregateModel(3, baseline)
 
     logger.info("Indexing train_set ...")
-    train_set = AttnDataset(config.FGC_TRAIN)
+    train_data = json_load(config.FGC_TRAIN)
+    train_set = AttnDataset(train_data[:1])
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
-    dev_set = AttnDataset(config.FGC_DEV)
+    dev_data = json_load(config.FGC_DEV)
+    dev_set = AttnDataset(dev_data[:1])
     logger.info("dev_set has {} instances".format(len(dev_set)))
-
-    trainer = SER_Trainer(train_set[:20], dev_set[:20], model, lr, model_file_name)
+    
+    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
 
     logger.info("Start training ...")
     trainer.train(num_epochs, batch_size)
 
 
 def train(lr, num_epochs, batch_size, model_file_name):
+    baseline = BaselineModel()
+    baseline.load_state_dict(torch.load('Models_SEs/model_epoch0_eval_em:0.180_precision:0.732_recall:0.454_f1:0.528_loss:0.246.m')) 
     model = AttnAggregateModel()
 
     logger.info("Indexing train_set ...")
-    train_set = AttnDataset(config.FGC_TRAIN)
+    train_data = json_load(config.FGC_TRAIN)
+    train_set = AttnDataset(train_data)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
-    dev_set = AttnDataset(config.FGC_DEV)
+    dev_data = json_load(config.FGC_DEV)
+    dev_set = AttnDataset(dev_data)
     logger.info("dev_set has {} instances".format(len(dev_set)))
 
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -108,6 +115,7 @@ class SER_Trainer:
         self.warmup_proportion = 0.1
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         n_gpu = torch.cuda.device_count()
+        logger.info("SER_Trainer in device: {}".format(device))
         self.device = device
         self.n_gpu = n_gpu
 
@@ -142,16 +150,21 @@ class SER_Trainer:
         for epoch_i in range(num_epochs):
             self.model.train()
             running_loss = 0.0
-            for batch in tqdm(self.train_set):
-                current_loss = self.model(batch)
-                current_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            for batch in tqdm(dataloader_train):
+                for t_i, t in batch.items():
+                    batch[t_i] = t.to(self.device)
+                
+                current_loss = self.model(batch, adjust_weight=True)
+                if self.n_gpu > 1:
+                    current_loss = current_loss.mean()
+                current_loss.sum().backward()
+                torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
                 optimizer.step()
                 scheduler.step()
                 running_loss += current_loss.item()
             learning_rate_scalar = scheduler.get_lr()[0]
             print('lr = %f' % learning_rate_scalar)
-            avg_loss = running_loss / len(self.train_set)
+            avg_loss = running_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             # eval(network, dev_batches, current_epoch, sp_golds, avg_loss)
 
