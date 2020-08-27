@@ -385,8 +385,8 @@ class SER_Trainer:
             logger.debug("indices_golds:{}".format(len(indices_golds)))
             logger.debug("indices_preds:{}".format(len(indices_preds)))
         metrics = self.eval_sp(indices_golds, indices_preds)
-        print(indices_golds)
-        print(indices_preds)
+        logger.debug(indices_golds)
+        logger.debug(indices_preds)
 
         return metrics
 
