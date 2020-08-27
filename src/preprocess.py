@@ -38,7 +38,7 @@ class AttnExample:
         for s in self.sentences:
             qa_pairs.append([self.question, s])
 
-        tensor_inp = tokenizer(qa_pairs, padding='max_length', truncation='longest_first', max_length=300,
+        tensor_inp = tokenizer(qa_pairs, padding='max_length', truncation='longest_first', max_length=max_length,
                               return_tensors='pt')
 
         if self.multiBERTs:
