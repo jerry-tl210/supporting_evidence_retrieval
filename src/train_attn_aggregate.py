@@ -4,14 +4,17 @@ from .std import *
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import numpy as np
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from . import config
+import glob
 
 from .preprocess import AttnDataset
 
 
 from .nn_models.baseline import BaselineModel
 from .nn_models.attn_aggregate import AttnAggregateModel
+from .nn_models.multiBERTs import MultiBERTsModel
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +34,8 @@ def main():
     parser.add_argument('-cmd',
                         required=True,
                         help='Command: {test_train} for testing.\n'
-                             '{train} for training all.')
+                             '{train} for training all.'
+                             '{eval_all} for evaluating all')
     parser.add_argument('-num_epochs',
                         default=10,
                         type=int,
@@ -40,9 +44,29 @@ def main():
                         default=16,
                         type=int,
                         help='batch size')
+    parser.add_argument('-accumulation_steps',
+                        type=int)
     parser.add_argument('-model_file_name',
                         required=True,
                         help='output model_file_name')
+    parser.add_argument('-data_type',
+                        required=True)   
+    parser.add_argument('-adjust_weight',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('-transform',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('-multiBERTs',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('-acc_gradient',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('-sentence',
+                        type=int,
+                        default=1)
+    
     args = parser.parse_args()
 
     myLogFormat = '%(asctime)s **%(levelname)s** [%(name)s:%(lineno)s] - %(message)s'
@@ -55,54 +79,146 @@ def main():
         logger.log(100, ' '.join(sys.argv))
 
     if args.cmd == 'test_train':
-        test_train(args.lr, args.num_epochs, args.batch_size, args.model_file_name)
+        test_train(args.lr, args.num_epochs, args.batch_size, 
+                   args.model_file_name, args.data_type, args.adjust_weight,
+                   args.transform, args.accumulation_steps, args.multiBERTs, 
+                   args.acc_gradient, args.sentence)
     elif args.cmd == 'train':
-        train(args.lr, args.num_epochs, args.batch_size, args.model_file_name)
+        train(args.lr, args.num_epochs, args.batch_size, 
+              args.model_file_name, args.data_type, args.adjust_weight,
+              args.transform, args.accumulation_steps, args.multiBERTs, 
+              args.acc_gradient, args.sentence)
+    elif args.cmd == 'test_train_baseline':
+        test_train_baseline(args.lr, args.num_epochs, args.batch_size, 
+              args.model_file_name, args.data_type, args.adjust_weight,
+              args.transform, args.accumulation_steps, args.multiBERTs, 
+              args.acc_gradient)
+    elif args.cmd == 'train_baseline':
+        train_baseline(args.lr, args.num_epochs, args.batch_size, 
+              args.model_file_name, args.data_type, args.adjust_weight,
+              args.transform, args.accumulation_steps, args.multiBERTs, 
+              args.acc_gradient)
 
-def test_use_baseline(train_set, dev_set, model, lr, model_file_name):
-    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
-    trainer.train(10, 2)
 
-def test_train(lr, num_epochs, batch_size, model_file_name):
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load('Models_SEs/model_epoch0_eval_em:0.180_precision:0.732_recall:0.454_f1:0.528_loss:0.246.m'))
-    model = AttnAggregateModel(3, baseline)
-
+def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient):
+    
+    model = BaselineModel()
+    
     logger.info("Indexing train_set ...")
-    train_data = json_load(config.FGC_TRAIN)
-    train_set = AttnDataset(train_data[:1])
+    if data_type == 'fgc':
+        train_data = json_load(config.FGC_TRAIN)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1)
+    if data_type == 'ssqa':
+        train_data = []
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                train_data = train_data + json.load(json_file)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
-    dev_data = json_load(config.FGC_DEV)
-    dev_set = AttnDataset(dev_data[:1])
+    if data_type == 'fgc': 
+        dev_data = json_load(config.FGC_DEV)
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1)
+    if data_type == 'ssqa':
+        dev_data = []
+        # Remember to edit the path!
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                dev_data = dev_data + json.load(json_file)
+        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, 1)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
 
     logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size)
-
-
-def train(lr, num_epochs, batch_size, model_file_name):
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
+    
+def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence):
+    
     baseline = BaselineModel()
-    baseline.load_state_dict(torch.load('Models_SEs/model_epoch0_eval_em:0.180_precision:0.732_recall:0.454_f1:0.528_loss:0.246.m')) 
-    model = AttnAggregateModel(3, baseline)
+    baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
+    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
+    
 
     logger.info("Indexing train_set ...")
-    train_data = json_load(config.FGC_TRAIN)
-    train_set = AttnDataset(train_data)
+    if data_type == 'fgc':
+        train_data = json_load(config.FGC_TRAIN)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence)
+    if data_type == 'ssqa':
+        train_data = []
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                train_data = train_data + json.load(json_file)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
-    dev_data = json_load(config.FGC_DEV)
-    dev_set = AttnDataset(dev_data)
+    if data_type == 'fgc': 
+        dev_data = json_load(config.FGC_DEV)
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, sentence)
+    if data_type == 'ssqa':
+        dev_data = []
+        # Remember to edit the path!
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                dev_data = dev_data + json.load(json_file)
+        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, sentence)   
+    logger.info("dev_set has {} instances".format(len(dev_set)))
+    
+    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
+
+    logger.info("Start training ...")
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
+
+
+def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence):
+    baseline = BaselineModel()
+    baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m')) 
+    
+    '''
+    state_dict = torch.load('Models_SEs/attn_aggregate/model_epoch10_eval_em:0.172_precision:0.524_recall:0.504_f1:0.477_loss:0.002.m')
+    # create new OrderedDict that does not contain `module.`
+    from collections import OrderedDict
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k[7:] # remove `module.`
+        new_state_dict[name] = v
+    # load params
+    model.load_state_dict(new_state_dict)
+    '''
+    
+    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
+    logger.info("Indexing train_set ...")
+    if data_type == 'fgc':
+        train_data = json_load(config.FGC_TRAIN)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence)
+    if data_type == 'ssqa':
+        train_data = []
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                train_data = train_data + json.load(json_file)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence)
+        
+    logger.info("train_set has {} instances".format(len(train_set)))
+
+    logger.info("Indexing dev_set")
+    if data_type == 'fgc':   
+        dev_data = json_load(config.FGC_DEV)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence)
+    if data_type == 'ssqa':
+        dev_data = []
+        # Remember to edit the path!
+        for filename in glob.glob('*.json'):
+            with open(filename) as json_file:
+                dev_data = dev_data + json.load(json_file)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence)  
     logger.info("dev_set has {} instances".format(len(dev_set)))
 
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
 
     logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size)
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
 
 
 class SER_Trainer:
@@ -124,16 +240,23 @@ class SER_Trainer:
             os.mkdir(trained_model_path)
         self.trained_model_path = trained_model_path
 
-    def train(self, num_epochs, batch_size):
+    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1, show_batch=True):
+        
+        logger.info("batch_size:{} accumulate_steps:{}".format(batch_size, accumulation_steps))
         param_optimizer = list(self.model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
 
+        
+        #for name, param in self.model.bert.named_parameters():
+            #param.requires_grad = False
+            
         dataloader_train = DataLoader(self.train_set, batch_size=batch_size, shuffle=True, num_workers=batch_size)
         optimizer_grouped_parameters = [
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
              'weight_decay': 0.01},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+        
         # model
         self.model.to(self.device)
 
@@ -142,75 +265,137 @@ class SER_Trainer:
 
         # optimizer
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.lr)
-        num_train_optimization_steps = len(dataloader_train) * num_epochs
+        num_train_optimization_steps = len(dataloader_train) * num_epochs / accumulation_steps
         scheduler = get_linear_schedule_with_warmup(optimizer,
                                                     num_warmup_steps=int(
                                                         num_train_optimization_steps * self.warmup_proportion),
                                                     num_training_steps=num_train_optimization_steps)
+        logger.info("start training loop")
+        
+        batch_eval = 100
         for epoch_i in range(num_epochs):
             self.model.train()
-            running_loss = 0.0
-            for batch in tqdm(dataloader_train):
+            total_loss = 0
+            logger.info("train epoch_i:{}".format(epoch_i))
+
+            for batch_i, batch in enumerate(tqdm(dataloader_train)):
+                #logger.info('batch_i:{}'.format(batch_i))
                 for t_i, t in batch.items():
                     batch[t_i] = t.to(self.device)
-                
-                current_loss = self.model(batch, adjust_weight=True)
+
+                loss = self.model(batch)
                 if self.n_gpu > 1:
-                    current_loss = current_loss.mean()
-                current_loss.sum().backward()
-                torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
-                optimizer.step()
-                scheduler.step()
-                running_loss += current_loss.item()
+                    loss = loss.mean()
+                if acc_gradient:
+                    loss = loss / accumulation_steps
+                loss.backward()
+                total_loss += loss.item()
+                    
+                if acc_gradient:
+                    if (batch_i+1) % accumulation_steps == 0:
+                        torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
+                        optimizer.step()
+                        scheduler.step()
+                        optimizer.zero_grad()
+                else:
+                    torch.nn.utils.clip_grad_norm_(self.model.module.parameters(), 1.0)
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
+                if (batch_i % batch_eval == 0):
+                    print("current batch loss:", loss.item())
+                    print("total loss:", total_loss)
+
             learning_rate_scalar = scheduler.get_lr()[0]
             print('lr = %f' % learning_rate_scalar)
-            avg_loss = running_loss / len(dataloader_train)
+            avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
-            # eval(network, dev_batches, current_epoch, sp_golds, avg_loss)
+            print("---------------------dev set performance----------------------")
+            self.eval(epoch_i, batch_size, self.dev_set, avg_loss)
+            print("---------------------train set performance----------------------")
+            self.eval(epoch_i, batch_size, self.train_set, avg_loss)
 
-#     def eval(self, batch_size):
-#         self.model.eval()
-#         gold_labels = self.dev_set.gold_labels
-#         predict_labels = []
-#         with torch.no_grad():
-#             dataloader_dev = DataLoader(self.dev_set, batch_size=batch_size,
-#                                         shuffle=False, collate_fn=hop_baseline_collate_eval,
-#                                         num_workers=batch_size)
-#             for batch in dataloader_dev:
-#                 for key in batch.keys():
-#                     batch[key] = batch[key].to(self.device)
-#                 predict_next_hop = self.model.module.predict if hasattr(self.model,
-#                                                                         'module') else self.model.predict
-#                 span_type, hop_start, hop_end, ans_start, ans_end = \
-#                     predict_next_hop(batch['input_ids'], batch['attention_mask'], batch['token_type_ids'])
-#                 for span_type_i, hop_start_i, hop_end_i, ans_start_i, ans_end_i in zip(span_type.split(1, dim=0),
-#                                                                                        hop_start.split(1, dim=0),
-#                                                                                        hop_end.split(1, dim=0),
-#                                                                                        ans_start.split(1, dim=0),
-#                                                                                        ans_end.split(1, dim=0)):
-#                     if span_type_i.item() == 0:
-#                         predict_labels.append(('hop', hop_start_i.item(), hop_end_i.item()))
-#                     elif span_type_i.item() == 1:
-#                         predict_labels.append(('ans', ans_start_i.item(), ans_end_i.item()))
-#                     else:
-#                         raise ValueError("predicted span_type error!")
-#
-#         metrics = eval_span(predict_labels, gold_labels)
-#         return metrics
-#
-# def eval_span(predict_labels, gold_labels):
-#     assert len(predict_labels) == len(gold_labels)
-#     N = len(predict_labels)
-#
-#     type_correct = 0
-#     span_correct = 0
-#     for predict_label, gold_label in zip(predict_labels, gold_labels):
-#         if predict_label[0] == gold_label[0]:
-#             type_correct += 1
-#             if predict_label[1] == gold_label[1].item():
-#                 if predict_label[2] == gold_label[2].item():
-#                     span_correct += 1
-#     return {'span_type_accuracy': type_correct / N, 'span_em': span_correct / N}
+
+    def eval(self, epoch_i, batch_size, dataset, avg_loss):
+        self.model.eval()
+        cumulative_len = dataset.cumulative_len
+        indices_golds = dataset.shints
+        with torch.no_grad():
+
+            counter = 0
+            dataloader = DataLoader(dataset, batch_size=batch_size,
+                                        shuffle=False, num_workers=batch_size)
+            indices_preds = []
+            current_document_labels = []
+            for batch in tqdm(dataloader):
+                for key in batch.keys():
+                    batch[key] = batch[key].to(self.device)
+                
+                predict_se = self.model.module.predict if hasattr(self.model,
+                                                                  'module') else self.model.predict
+                current_labels = predict_se(batch)
+                for label in current_labels:
+                    if counter + 1 in cumulative_len:
+                        current_document_labels += label
+                        current_document_indices = np.where(np.array(current_document_labels) == 1)[0].tolist()
+                        indices_preds.append(current_document_indices)
+                        current_document_labels = []
+                        
+                    else:
+                        current_document_labels += label
+
+                    counter = counter + 1
+
+            print("indices_golds", len(indices_golds))
+            print("indices_preds", len(indices_preds))
+        metrics = self.eval_sp(indices_golds, indices_preds)
+        print(indices_golds)
+        print(indices_preds)
+        torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_loss:{5:.3f}.m".format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'], metrics['sp_f1'], avg_loss))
+
+        return metrics
+
+    def update_sp(self, metrics, sp_gold, sp_pred):
+
+        tp, fp, fn = 0, 0, 0
+
+        for p in sp_pred:
+            if p in sp_gold:
+                tp += 1
+            else:
+                fp += 1
+        for g in sp_gold:
+            if g not in sp_pred:
+                fn += 1
+
+        precision = 1.0 * tp / (tp + fp) if tp + fp > 0 else 0.0
+        recall = 1.0 * tp / (tp + fn) if tp + fn > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+        em = 1.0 if fp + fn == 0 else 0.0
+
+        metrics['sp_em'] += em
+        metrics['sp_f1'] += f1
+        metrics['sp_prec'] += precision
+        metrics['sp_recall'] += recall
+
+        return precision, recall, f1
+
+    def eval_sp(self, indices_golds, indices_preds):
+
+        metrics = {'sp_em': 0, 'sp_prec': 0, 'sp_recall': 0, 'sp_f1': 0}
+
+        assert len(indices_golds) == len(indices_preds)
+
+        for sp_gold, sp_pred in zip(indices_golds, indices_preds):
+            self.update_sp(metrics, sp_gold, sp_pred)
+
+        N = len(indices_golds)
+        for k in metrics.keys():
+            metrics[k] /= N
+            metrics[k] = round(metrics[k], 3)
+        print(metrics)
+        return metrics
+
 
 if __name__ == '__main__':
     main()

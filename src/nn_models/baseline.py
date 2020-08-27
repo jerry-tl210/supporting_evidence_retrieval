@@ -11,56 +11,43 @@ class BaselineModel(nn.Module):
         self.bert = BertModel.from_pretrained('bert-base-chinese')
         self.linear = nn.Linear(768, 1)
 
-    def forward(self, batch):
-        # batch['ids'] = (batch_size, sent_len)
-        # batch['segment_ids'] = (batch_size, sent_len)
-        # batch['mask_ids'] = (batch_size, sent_len)
+    def forward_nn(self, batch):
+        # batch['ids'] = (batch_size, 1, sent_len)
+        # batch['segment_ids'] = (batch_size, 1, sent_len)
+        # batch['mask_ids'] = (batch_size, 1, sent_len)
         # pooler_output = (batch_size, 768)
         # output = (batch_size, 1)
 
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-        token_type_ids = batch['token_type_ids']
+        input_ids = batch['input_ids'].squeeze(1) # (batch_size, sent_len)
+        attention_mask = batch['attention_mask'].squeeze(1) # (batch_size, sent_len)
+        token_type_ids = batch['token_type_ids'].squeeze(1) # (batch_size, sent_len)
 
+        
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                 attention_mask=attention_mask,
                                                 token_type_ids=token_type_ids)
         
         linear_output = self.linear(pooler_output)
-
         return linear_output
 
-    def loss(self, batch):
+    def forward(self, batch):
 
+        output = self.forward_nn(batch)
+        labels = batch['label'].type(torch.float)
         loss_fn = nn.BCEWithLogitsLoss()
-        output = self.forward(batch)
-        target = batch['label'].float()
-        return loss_fn(output, target)
+        loss = loss_fn(output, labels)
+        return loss
 
-    def _predict(self, batch):
-
-        output = self.forward(batch)
-        scores = torch.sigmoid(output)
-        scores = scores.cpu().numpy()[:, 0].tolist()
-
-        return scores
-
-    def predict_fgc(self, batch, threshold=0.5):
-
-        scores = self._predict(batch)
-        max_i = 0
-        max_score = 0
-        sp = []
-
-        for i, score in enumerate(scores):
-
-            if score > max_score:
-                max_i = i
-                max_score = score
-            if score >= threshold:
-                sp.append(i)
-
-        if not sp:
-            sp.append(max_i)
-
-        return {'sp': sp, 'sp_scores': scores}
+    def predict(self, batch, threshold=0.5):
+        output = self.forward_nn(batch)
+        score = torch.sigmoid(output).cpu()
+        #print(score)
+        highest_score = max(score[:, 0]).item()
+        #if highest_score > threshold:
+        predict_label = torch.where(score > threshold, torch.ones(len(score),1), torch.zeros(len(score), 1))
+        '''    
+        else:    
+            predict_label = torch.where(score == highest_score, torch.ones(len(score),1), torch.zeros(len(score), 1))
+        '''
+        predict_label = predict_label.numpy().astype(int).tolist()
+        return predict_label
