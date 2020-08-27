@@ -18,10 +18,9 @@ class BaselineModel(nn.Module):
         # pooler_output = (batch_size, 768)
         # output = (batch_size, 1)
 
-        input_ids = batch['input_ids'].squeeze(1) # (batch_size, sent_len)
-        attention_mask = batch['attention_mask'].squeeze(1) # (batch_size, sent_len)
-        token_type_ids = batch['token_type_ids'].squeeze(1) # (batch_size, sent_len)
-
+        input_ids = batch['input_ids']# (batch_size, sent_len)
+        attention_mask = batch['attention_mask']# (batch_size, sent_len)
+        token_type_ids = batch['token_type_ids'] # (batch_size, sent_len)
         
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                 attention_mask=attention_mask,

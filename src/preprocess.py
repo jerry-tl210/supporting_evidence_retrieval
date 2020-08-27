@@ -32,7 +32,7 @@ class AttnExample:
         self.label = label
         self.multiBERTs = multiBERTs
         
-    def convert2tensor(self):
+    def convert2tensor(self, two_dimension, max_length):
         qa_pairs = []
 
         for s in self.sentences:
@@ -45,7 +45,7 @@ class AttnExample:
             ss_pairs = []
             for s in self.sentences:
                 ss_pairs.append([self.sentences[len(self.sentences) // 2], s])
-            tensor_inp_ss = tokenizer(ss_pairs, padding='max_length', truncation='longest_first', max_length=300, return_tensors='pt')
+            tensor_inp_ss = tokenizer(ss_pairs, padding='max_length', truncation='longest_first', max_length=max_length, return_tensors='pt')
 
 
             tensor_inp['nsp_input_ids'] = tensor_inp_ss['input_ids']
@@ -58,6 +58,11 @@ class AttnExample:
         #tensor_inp['attention_mask'] = tensor_inp['attention_mask'].to(device)
         #tensor_inp['token_type_ids'] = tensor_inp['token_type_ids'].to(device)
         #tensor_inp['label'] = tensor_inp['label'].to(device)
+
+        if two_dimension:
+            tensor_inp['input_ids'] = tensor_inp['input_ids'].squeeze(0)
+            tensor_inp['attention_mask'] = tensor_inp['attention_mask'].squeeze(0)
+            tensor_inp['token_type_ids'] = tensor_inp['token_type_ids'].squeeze(0)
 
         return tensor_inp
 
@@ -133,7 +138,7 @@ def data_preprocessing_ssqa(data, sentence_window, multiBERTs):
     return out_examples, cumulative_len
 
 class AttnDataset(Dataset):
-    def __init__(self, data, data_type, multiBERTs, number_of_sentences):
+    def __init__(self, data, data_type, multiBERTs, number_of_sentences, max_length, two_dimension=None):
         """
         :param json_fp: e.g, "FGC_release_1.7.13/FGC_release_all_train.json"
         """
@@ -149,7 +154,7 @@ class AttnDataset(Dataset):
         self.shints = []
         
         for e in examples:
-            self.instances.append(e.convert2tensor())
+            self.instances.append(e.convert2tensor(max_length, two_dimension))
             
         if data_type == 'fgc':
             for document in data:

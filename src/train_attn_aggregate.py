@@ -66,7 +66,9 @@ def main():
     parser.add_argument('-sentence',
                         type=int,
                         default=1)
-    
+    parser.add_argument('-max_length',
+                        type=int,
+                        default=512)
     args = parser.parse_args()
 
     myLogFormat = '%(asctime)s **%(levelname)s** [%(name)s:%(lineno)s] - %(message)s'
@@ -82,51 +84,50 @@ def main():
         test_train(args.lr, args.num_epochs, args.batch_size, 
                    args.model_file_name, args.data_type, args.adjust_weight,
                    args.transform, args.accumulation_steps, args.multiBERTs, 
-                   args.acc_gradient, args.sentence)
+                   args.acc_gradient, args.sentence, args.max_length)
     elif args.cmd == 'train':
         train(args.lr, args.num_epochs, args.batch_size, 
               args.model_file_name, args.data_type, args.adjust_weight,
               args.transform, args.accumulation_steps, args.multiBERTs, 
-              args.acc_gradient, args.sentence)
+              args.acc_gradient, args.sentence, args.max_length)
     elif args.cmd == 'test_train_baseline':
         test_train_baseline(args.lr, args.num_epochs, args.batch_size, 
               args.model_file_name, args.data_type, args.adjust_weight,
               args.transform, args.accumulation_steps, args.multiBERTs, 
-              args.acc_gradient)
+              args.acc_gradient, args.max_length)
     elif args.cmd == 'train_baseline':
         train_baseline(args.lr, args.num_epochs, args.batch_size, 
               args.model_file_name, args.data_type, args.adjust_weight,
               args.transform, args.accumulation_steps, args.multiBERTs, 
-              args.acc_gradient)
+              args.acc_gradient, args.max_length)
 
 
-def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient):
+def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, max_length):
     
     model = BaselineModel()
     
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1, max_length, True)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1, max_length, True)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc': 
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1)
-    if data_type == 'ssqa':
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1, max_length, True)
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, 1)   
+        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, 1, max_length, True)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -134,33 +135,33 @@ def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, 
     logger.info("Start training ...")
     trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
 
-def train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient):
+def train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, max_length):
     
     model = BaselineModel()
     
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, True)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, True)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc': 
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, True)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1)   
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, True)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -168,7 +169,7 @@ def train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjus
     logger.info("Start training ...")
     trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
     
-def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence):
+def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
     
     baseline = BaselineModel()
     baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
@@ -178,26 +179,26 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc': 
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, sentence)
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, sentence, max_length)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, sentence)   
+        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, sentence, max_length)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -206,7 +207,7 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
 
 
-def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence):
+def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
     baseline = BaselineModel()
     baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m')) 
     
@@ -226,27 +227,27 @@ def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight,
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length)
         
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc':   
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence)  
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length)  
     logger.info("dev_set has {} instances".format(len(dev_set)))
 
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
