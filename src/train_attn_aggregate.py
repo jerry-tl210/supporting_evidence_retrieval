@@ -341,14 +341,15 @@ class SER_Trainer:
                     print("total loss:", total_loss)
 
             learning_rate_scalar = scheduler.get_lr()[0]
-            print('lr = %f' % learning_rate_scalar)
+            logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             print("---------------------dev set performance----------------------")
-            self.eval(epoch_i, batch_size, self.dev_set, avg_loss)
+            dev_performance = self.eval(epoch_i, batch_size, self.dev_set, avg_loss)
             print("---------------------train set performance----------------------")
-            self.eval(epoch_i, batch_size, self.train_set, avg_loss)
+            train_performance = self.eval(epoch_i, batch_size, self.train_set, avg_loss)
 
+            torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}_train_em:{6:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss, train_performance['sp_em']))
 
     def eval(self, epoch_i, batch_size, dataset, avg_loss):
         self.model.eval()
@@ -380,12 +381,11 @@ class SER_Trainer:
 
                     counter = counter + 1
 
-            print("indices_golds", len(indices_golds))
-            print("indices_preds", len(indices_preds))
+            logger.debug("indices_golds:{}".format(len(indices_golds)))
+            logger.debug("indices_preds:{}".format(len(indices_preds)))
         metrics = self.eval_sp(indices_golds, indices_preds)
         print(indices_golds)
         print(indices_preds)
-        torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_loss:{5:.3f}.m".format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'], metrics['sp_f1'], avg_loss))
 
         return metrics
 
