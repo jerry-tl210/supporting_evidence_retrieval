@@ -138,7 +138,7 @@ def data_preprocessing_ssqa(data, sentence_window, multiBERTs):
     return out_examples, cumulative_len
 
 class AttnDataset(Dataset):
-    def __init__(self, data, data_type, multiBERTs, number_of_sentences, max_length, two_dimension=None):
+    def __init__(self, data, data_type, multiBERTs, number_of_sentences, max_length, two_dimension=False):
         """
         :param json_fp: e.g, "FGC_release_1.7.13/FGC_release_all_train.json"
         """

@@ -32,7 +32,6 @@ class AttnAggregateModel(nn.Module):
         max_sentence_length = batch['input_ids'].shape[2]
 
         input_ids = batch['input_ids'].view(-1, max_sentence_length)
-
         device = input_ids.device
         token_type_ids = batch['token_type_ids'].view(-1, max_sentence_length)
         attention_mask = batch['attention_mask'].view(-1, max_sentence_length)

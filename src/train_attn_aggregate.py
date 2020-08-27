@@ -179,26 +179,26 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length, False)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length)
+        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, sentence, max_length, False)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc': 
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, sentence, max_length)
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, sentence, max_length, False)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, sentence, max_length)   
+        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, sentence, max_length, False)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -227,27 +227,27 @@ def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight,
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length, False)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, sentence, max_length, False)
         
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc':   
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length, False)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length)  
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, sentence, max_length, False)  
     logger.info("dev_set has {} instances".format(len(dev_set)))
 
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
