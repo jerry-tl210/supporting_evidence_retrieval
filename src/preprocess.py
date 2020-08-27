@@ -154,7 +154,7 @@ class AttnDataset(Dataset):
         self.shints = []
         
         for e in examples:
-            self.instances.append(e.convert2tensor(max_length, two_dimension))
+            self.instances.append(e.convert2tensor(two_dimension, max_length))
             
         if data_type == 'fgc':
             for document in data:
