@@ -68,11 +68,11 @@ class AttnAggregateModel(nn.Module):
 
         final_output = self.sp_linear(aggregated_sentence)  # (batch, 1)
 
-        return final_output
+        return weight, final_output
 
     def forward(self, batch):
 
-        output = self.forward_nn(batch)
+        weight, output = self.forward_nn(batch)
         labels = batch['label'].type(torch.float)
         loss_fn = nn.BCEWithLogitsLoss()
         loss = loss_fn(output, labels)
@@ -80,7 +80,7 @@ class AttnAggregateModel(nn.Module):
         return loss
     
     def predict(self, batch, threshold=0.5):
-        output = self.forward_nn(batch)
+        weight, output = self.forward_nn(batch)
         score = torch.sigmoid(output).cpu()
         highest_score = max(score[:, 0]).item()
         #if highest_score > threshold:
@@ -90,7 +90,7 @@ class AttnAggregateModel(nn.Module):
             predict_label = torch.where(score == highest_score, torch.ones(len(score),1), torch.zeros(len(score), 1))
         '''
         predict_label = predict_label.numpy().astype(int).tolist()
-        return predict_label
+        return weight, predict_label
 
 """
     def _predict(self, batch):

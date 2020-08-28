@@ -123,11 +123,12 @@ def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, 
         dev_data = json_load(config.FGC_DEV)
         dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1, max_length, True)
         dev_data = []
+    if data_type == 'ssqa':
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data[:1], data_type, multiBERTs, 1, max_length, True)   
+        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1, max_length, True)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -142,26 +143,26 @@ def train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjus
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, True)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, max_length, True)
     if data_type == 'ssqa':
         train_data = []
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, True)
+        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, max_length, True)
     logger.info("train_set has {} instances".format(len(train_set)))
 
     logger.info("Indexing dev_set")
     if data_type == 'fgc': 
         dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, True)
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, max_length, True)
     if data_type == 'ssqa':
         dev_data = []
         # Remember to edit the path!
         for filename in glob.glob('*.json'):
             with open(filename) as json_file:
                 dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, True)   
+        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, max_length, True)   
     logger.info("dev_set has {} instances".format(len(dev_set)))
     
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
@@ -346,30 +347,35 @@ class SER_Trainer:
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             print("---------------------dev set performance----------------------")
-            dev_performance = self.eval(epoch_i, batch_size, self.dev_set, avg_loss)
-            print("---------------------train set performance----------------------")
-            train_performance = self.eval(epoch_i, batch_size, self.train_set, avg_loss)
+            dev_performance = self.eval(epoch_i, batch_size*10, self.dev_set, avg_loss)
+            #print("---------------------train set performance----------------------")
+            #train_performance = self.eval(epoch_i, batch_size, self.train_set, avg_loss)
 
-            torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}_train_em:{6:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss, train_performance['sp_em']))
+            torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss))
+            
 
     def eval(self, epoch_i, batch_size, dataset, avg_loss):
         self.model.eval()
         cumulative_len = dataset.cumulative_len
         indices_golds = dataset.shints
         with torch.no_grad():
-
             counter = 0
             dataloader = DataLoader(dataset, batch_size=batch_size,
                                         shuffle=False, num_workers=batch_size)
             indices_preds = []
             current_document_labels = []
+            weights = []
             for batch in tqdm(dataloader):
                 for key in batch.keys():
                     batch[key] = batch[key].to(self.device)
-                
                 predict_se = self.model.module.predict if hasattr(self.model,
-                                                                  'module') else self.model.predict
-                current_labels = predict_se(batch)
+                                                              'module') else self.model.predict
+                
+                if isinstance(self.model.module, AttnAggregateModel):
+                    weight, current_labels = predict_se(batch)
+                    weights.append(weight)
+                else:
+                    current_labels = predict_se(batch)
                 for label in current_labels:
                     if counter + 1 in cumulative_len:
                         current_document_labels += label
@@ -381,13 +387,14 @@ class SER_Trainer:
                         current_document_labels += label
 
                     counter = counter + 1
-
+                
             logger.debug("indices_golds:{}".format(len(indices_golds)))
             logger.debug("indices_preds:{}".format(len(indices_preds)))
         metrics = self.eval_sp(indices_golds, indices_preds)
         logger.debug(indices_golds)
         logger.debug(indices_preds)
-
+        
+        print(weights)
         return metrics
 
     def update_sp(self, metrics, sp_gold, sp_pred):

@@ -40,7 +40,7 @@ class BaselineModel(nn.Module):
     def predict(self, batch, threshold=0.5):
         output = self.forward_nn(batch)
         score = torch.sigmoid(output).cpu()
-        #print(score)
+
         highest_score = max(score[:, 0]).item()
         #if highest_score > threshold:
         predict_label = torch.where(score > threshold, torch.ones(len(score),1), torch.zeros(len(score), 1))
