@@ -54,6 +54,7 @@ class AttnExample:
             
         tensor_inp['label'] = torch.tensor(self.label)
         tensor_inp['sentence_mask'] = torch.tensor(self.sentence_mask)
+        tensor_inp['sentence_position'] = torch.tensor([i for i in range(len(self.sentences))])
         #tensor_inp['input_ids'] = tensor_inp['input_ids'].to(device)
         #tensor_inp['attention_mask'] = tensor_inp['attention_mask'].to(device)
         #tensor_inp['token_type_ids'] = tensor_inp['token_type_ids'].to(device)
