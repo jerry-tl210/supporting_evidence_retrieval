@@ -54,19 +54,22 @@ def main():
     model.eval()
     
     # evaluate train set
-    train_dataset =
-    eval(model, args.batch_size, train_dataset, args.model_file_name)
+    train_data = json_load(config.FGC_TRAIN)
+    train_set = AttnDataset(train_data, args.data_type, False, 3, 512, False)
+    eval(model, train_data, args.batch_size, train_set, args.model_file_name)
     
     # evaluate dev set
-    dev_dataset =
-    eval(model, args.batch_size, dev_dataset, args.model_file_name)
+    dev_data = json_load(config.FGC_DEV)
+    dev_set = AttnDataset(dev_data, args.data_type, False, 3, 512, False)
+    eval(model, dev_data, args.batch_size, dev_set, args.model_file_name)
     
     # evaluate test set
-    test_dataset =
-    eval(model, args.batch_size, test_dataset, args.model_file_name)
+    test_data = json_load(config.FGC_TEST)
+    test_set = AttnDataset(test_data, args.data_type, False, 3, 512, False)
+    eval(model, test_data, args.batch_size, test_set, args.model_file_name)
 
 
-def eval(model, batch_size, dataset, model_file_path):
+def eval(model, data, batch_size, dataset, model_file_path):
     model.eval()
     cumulative_len = dataset.cumulative_len
     indices_golds = dataset.shints
@@ -104,8 +107,9 @@ def eval(model, batch_size, dataset, model_file_path):
         logger.debug("indices_golds:{}".format(len(indices_golds)))
         logger.debug("indices_preds:{}".format(len(indices_preds)))
         
+        preprocessed_data = eval_preprocess(data, indices_preds)
         with open(model_file_path+'/analysis.txt', 'w') as f:
-            f.write(get_analysis(data))
+            f.write(get_analysis(preprocessed_data))
         
     metrics = eval_sp(indices_golds, indices_preds)
     logger.debug(indices_golds)
@@ -113,3 +117,8 @@ def eval(model, batch_size, dataset, model_file_path):
     
     print(weights)
     return metrics
+
+def eval_preprocess(data, indices_preds):
+    for document_i, document in enumerate(data):
+        document['QUESTIONS'][0]['sp'] = indices_preds[document_i]
+    return data
