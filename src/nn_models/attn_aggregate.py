@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
 from transformers import BertModel
-import copy
 import torch.nn.functional as F
 from ..std import *
 
 logger = logging.getLogger(__name__)
 
-class AttnAggregateModel(nn.Module):
 
+class AttnAggregateModel(nn.Module):
     def __init__(self, number_of_sentence, adjust_weight, trained_baseline_model=None, transform=True):
         super(AttnAggregateModel, self).__init__()
         logger.info("self.adjust_weight:{}".format(adjust_weight))
@@ -24,8 +23,8 @@ class AttnAggregateModel(nn.Module):
             self.current_sentence_transform = nn.Linear(768, 768, bias=False)
             self.target_sentence_transform = nn.Linear(768, 768, bias=False)
 
-        self.linearAgg = nn.Linear(1536, 1536)
-        self.weightTransform = nn.Linear(1536, 1)
+        self.weight_dropout = nn.Dropout(0.2)
+        self.weightTransform = nn.Linear(1536, 1, bias=False)
 
     def forward_nn(self, batch):
         batch_size = batch['input_ids'].shape[0]
@@ -45,9 +44,8 @@ class AttnAggregateModel(nn.Module):
         if self.adjust_weight:
             if hasattr(self, 'current_sentence_transform'):
                 current_sentence = pooler_output[:, self.number_of_sentence // 2, :].unsqueeze(1)  # (batch, 1, 768)
-                current_sentence = self.current_sentence_transform(current_sentence) # (batch, 1, 768)
-                
-                target_sentence = self.target_sentence_transform(pooler_output) # (batch, 3, 768)
+                current_sentence = self.current_sentence_transform(current_sentence).tanh() # (batch, 1, 768)
+                target_sentence = self.target_sentence_transform(pooler_output).tanh() # (batch, 3, 768)
                 
             else:
                 current_sentence = pooler_output[:, self.number_of_sentence // 2, :].unsqueeze(1)  # (batch, 1, 768)
@@ -55,9 +53,8 @@ class AttnAggregateModel(nn.Module):
                 
             current_sentence = current_sentence.expand(-1, self.number_of_sentence, -1)  # (batch, 3, 768)
             concatenated = torch.cat((current_sentence, target_sentence), dim=-1)  # (batch, 3, 768*2)
-            weight = self.linearAgg(concatenated) # (batch, 3, 1536)
-            weight = weight.tanh() # (batch, 3, 1536)
-            weight = self.weightTransform(weight) # (batch, 3, 1)
+            concatenated = self.weight_dropout(concatenated) # (batch, 3, 1536)
+            weight = self.weightTransform(concatenated) # (batch, 3, 1)
             weight = weight + (1.0 - sentence_mask) * -10000
             weight = F.softmax(weight, dim=1)
         else:            
@@ -65,59 +62,20 @@ class AttnAggregateModel(nn.Module):
             
         aggregated_sentence = torch.matmul(weight.transpose(1, 2), target_sentence)  # (batch, 1, 768)
         aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
+        logits = self.sp_linear(aggregated_sentence)  # (batch, 1)
 
-        final_output = self.sp_linear(aggregated_sentence)  # (batch, 1)
-
-        return weight, final_output
+        return logits, weight
 
     def forward(self, batch):
-
-        weight, output = self.forward_nn(batch)
+        logits, _ = self.forward_nn(batch)
         labels = batch['label'].type(torch.float)
         loss_fn = nn.BCEWithLogitsLoss()
-        loss = loss_fn(output, labels)
-
+        loss = loss_fn(logits, labels)
         return loss
     
     def predict(self, batch, threshold=0.5):
-        weight, output = self.forward_nn(batch)
-        score = torch.sigmoid(output).cpu()
-        highest_score = max(score[:, 0]).item()
-        #if highest_score > threshold:
+        logits, weight = self.forward_nn(batch)
+        score = torch.sigmoid(logits).cpu()
         predict_label = torch.where(score > threshold, torch.ones(len(score),1), torch.zeros(len(score), 1))
-        '''    
-        else:    
-            predict_label = torch.where(score == highest_score, torch.ones(len(score),1), torch.zeros(len(score), 1))
-        '''
         predict_label = predict_label.numpy().astype(int).tolist()
-        return weight, predict_label
-
-"""
-    def _predict(self, batch):
-
-        with torch.no_grad():
-            output, att_weight = self.forward_nn(batch)
-            scores = torch.sigmoid(output)
-            scores = scores.cpu().numpy().tolist()
-
-        return scores
-
-    def predict_fgc(self, batch, threshold=0.5):
-        scores = self._predict(batch)
-        max_i = 0
-        max_score = 0
-        sp = []
-
-        for i, score in enumerate(scores[0]):
-
-            if score > max_score:
-                max_i = i
-                max_score = score
-            if score >= threshold:
-                sp.append(i)
-
-        # This is to ensure there's no empty supporting evidences
-        if not sp:
-            sp.append(max_i)
-        return {'sp': sp, 'sp_scores': scores}
-"""
+        return predict_label, score.numpy().tolist(), weight.numpy().tolist()

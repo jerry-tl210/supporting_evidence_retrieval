@@ -49,4 +49,4 @@ class BaselineModel(nn.Module):
             predict_label = torch.where(score == highest_score, torch.ones(len(score),1), torch.zeros(len(score), 1))
         '''
         predict_label = predict_label.numpy().astype(int).tolist()
-        return predict_label
+        return predict_label, score.numpy().to_list()

@@ -1,5 +1,8 @@
+from tqdm import tqdm
+import numpy as np
 import torch
-from .nn_models.attn_aggregate import AttnAggregateModel
+from torch.utils.data import DataLoader
+from .preprocess import AttnDataset
 from .nn_models.baseline import BaselineModel
 from .evaluation.eval_metric import eval_sp
 from .evaluation.analysis import get_analysis
@@ -33,6 +36,15 @@ def main():
                         default=16,
                         type=int,
                         help='batch size')
+    parser.add_argument('-sentence',
+                        type=int,
+                        default=1)
+    parser.add_argument('-multiBERTs',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('-max_length',
+                        type=int,
+                        default=512)
     args = parser.parse_args()
 
     myLogFormat = '%(asctime)s **%(levelname)s** [%(name)s:%(lineno)s] - %(message)s'
@@ -43,82 +55,82 @@ def main():
         logger.log(100, ' '.join(sys.argv))
     else:
         logger.log(100, ' '.join(sys.argv))
-    
-    trained_baseline_model = BaselineModel()
-    model = AttnAggregateModel(3, args.adjust_weight, trained_baseline_model=trained_baseline_model, transform=args.transform)
-    
+
+    model = BaselineModel()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_folder = str(config.TRAINED_MODELS / args.model_file_name)
     model_path = get_model_path(model_folder)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
-    
-    # evaluate train set
+
+    # train set
+    logger.info("Evaluate train set")
     train_data = json_load(config.FGC_TRAIN)
-    train_set = AttnDataset(train_data, args.data_type, False, 3, 512, False)
-    eval(model, train_data, args.batch_size, train_set, args.model_file_name)
-    
-    # evaluate dev set
+    train_set = AttnDataset(train_data, args.data_type, args.multiBERTs, args.sentence, args.max_length, False)
+    get_eval(model, train_data, args.batch_size, train_set, args.model_file_name, device, "train_analysis.txt")
+
+    # dev set
+    logger.info("Evaluate dev set")
     dev_data = json_load(config.FGC_DEV)
-    dev_set = AttnDataset(dev_data, args.data_type, False, 3, 512, False)
-    eval(model, dev_data, args.batch_size, dev_set, args.model_file_name)
-    
-    # evaluate test set
+    dev_set = AttnDataset(dev_data, args.data_type, args.multiBERTs, args.sentence, args.max_length, False)
+    get_eval(model, dev_data, args.batch_size, dev_set, args.model_file_name, device, "dev_analysis.txt")
+
+    # test set
+    logger.info("Evaluate test set")
     test_data = json_load(config.FGC_TEST)
-    test_set = AttnDataset(test_data, args.data_type, False, 3, 512, False)
-    eval(model, test_data, args.batch_size, test_set, args.model_file_name)
+    test_set = AttnDataset(test_data, args.data_type, args.multiBERTs, args.sentence, args.max_length, False)
+    get_eval(model, test_data, args.batch_size, test_set, args.model_file_name, device, "test_analysis.txt")
 
 
-def eval(model, data, batch_size, dataset, model_file_path):
-    model.eval()
+def get_eval(model, data, batch_size, dataset, model_file_path, device, output_file_name):
     cumulative_len = dataset.cumulative_len
     indices_golds = dataset.shints
-    
+
     with torch.no_grad():
         counter = 0
         dataloader = DataLoader(dataset, batch_size=batch_size,
                                 shuffle=False, num_workers=batch_size)
         indices_preds = []
+        all_scores = []
+
         current_document_labels = []
-        weights = []
+        current_document_scores = []
         for batch in tqdm(dataloader):
             for key in batch.keys():
-                batch[key] = batch[key].to(self.device)
-            predict_se = self.model.module.predict if hasattr(self.model,
-                                                              'module') else self.model.predict
-            
-            if isinstance(self.model.module, AttnAggregateModel):
-                weight, current_labels = predict_se(batch)
-                weights.append(weight)
-            else:
-                current_labels = predict_se(batch)
-            for label in current_labels:
+                batch[key] = batch[key].to(device)
+            predict_se = model.module.predict if hasattr(model, 'module') else model.predict
+            current_labels, current_scores = predict_se(batch)
+
+            for label, score in zip(current_labels, current_scores):
                 if counter + 1 in cumulative_len:
                     current_document_labels += label
+                    current_document_scores += score
                     current_document_indices = np.where(np.array(current_document_labels) == 1)[0].tolist()
                     indices_preds.append(current_document_indices)
+                    all_scores.append(current_document_scores)
                     current_document_labels = []
-                
+                    current_document_scores = []
+
                 else:
                     current_document_labels += label
-                
-                counter = counter + 1
-        
-        logger.debug("indices_golds:{}".format(len(indices_golds)))
-        logger.debug("indices_preds:{}".format(len(indices_preds)))
-        
-        preprocessed_data = eval_preprocess(data, indices_preds)
-        with open(model_file_path+'/analysis.txt', 'w') as f:
-            f.write(get_analysis(preprocessed_data))
-        
-    metrics = eval_sp(indices_golds, indices_preds)
-    logger.debug(indices_golds)
-    logger.debug(indices_preds)
-    
-    print(weights)
-    return metrics
+                    current_document_scores += score
 
-def eval_preprocess(data, indices_preds):
+                counter = counter + 1
+
+    logger.debug("indices_golds:{}".format(len(indices_golds)))
+    logger.debug("indices_preds:{}".format(len(indices_preds)))
+
+    assert len(indices_golds) == len(indices_preds)
+
+    metrics = eval_sp(indices_golds, indices_preds)
+    preprocessed_data = eval_preprocess(data, indices_preds, all_scores)
+    with open(model_file_path + '/' + output_file_name, 'w') as f:
+        f.write(str(metrics) + '\n')
+        f.write(get_analysis(preprocessed_data))
+
+
+def eval_preprocess(data, indices_preds,  all_scores):
     for document_i, document in enumerate(data):
         document['QUESTIONS'][0]['sp'] = indices_preds[document_i]
+        document['QUESTIONS'][0]['scores'] = all_scores[document_i]
     return data
