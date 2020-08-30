@@ -236,7 +236,7 @@ class SER_Trainer:
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             print("---------------------dev set performance----------------------")
-            dev_performance = self.eval(epoch_i, batch_size * 10, self.dev_set, avg_loss)
+            dev_performance = self.eval(batch_size * 10, self.dev_set)
 
             torch.save(self.model.state_dict(),
                        self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(

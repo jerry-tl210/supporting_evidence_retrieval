@@ -1,5 +1,4 @@
 from tqdm import tqdm
-import logging
 from .std import *
 import torch
 import torch.nn as nn
@@ -13,8 +12,9 @@ from .preprocess import AttnDataset
 
 from .nn_models.baseline import BaselineModel
 from .nn_models.attn_aggregate import AttnAggregateModel
-from .nn_models.multiBERTs import MultiBERTsModel
 from .nn_models.attn_aggregate_with_sent_position import AttnAggregateSentPosModel
+
+from .evaluation.eval_metric import eval_sp
 
 logger = logging.getLogger(__name__)
 
@@ -351,16 +351,14 @@ class SER_Trainer:
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             print("---------------------dev set performance----------------------")
-            dev_performance = self.eval(epoch_i, batch_size * 10, self.dev_set, avg_loss)
-            # print("---------------------train set performance----------------------")
-            # train_performance = self.eval(epoch_i, batch_size, self.train_set, avg_loss)
+            dev_performance = self.eval(batch_size * 10, self.dev_set)
             
             torch.save(self.model.state_dict(),
                        self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(
                            epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'],
                            dev_performance['sp_f1'], avg_loss))
     
-    def eval(self, epoch_i, batch_size, dataset, avg_loss):
+    def eval(self, batch_size, dataset):
         self.model.eval()
         cumulative_len = dataset.cumulative_len
         indices_golds = dataset.shints
@@ -396,52 +394,10 @@ class SER_Trainer:
             
             logger.debug("indices_golds:{}".format(len(indices_golds)))
             logger.debug("indices_preds:{}".format(len(indices_preds)))
-        metrics = self.eval_sp(indices_golds, indices_preds)
+        metrics = eval_sp(indices_golds, indices_preds)
         logger.debug(indices_golds)
         logger.debug(indices_preds)
-        
-        print(weights)
-        return metrics
-    
-    def update_sp(self, metrics, sp_gold, sp_pred):
-        
-        tp, fp, fn = 0, 0, 0
-        
-        for p in sp_pred:
-            if p in sp_gold:
-                tp += 1
-            else:
-                fp += 1
-        for g in sp_gold:
-            if g not in sp_pred:
-                fn += 1
-        
-        precision = 1.0 * tp / (tp + fp) if tp + fp > 0 else 0.0
-        recall = 1.0 * tp / (tp + fn) if tp + fn > 0 else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
-        em = 1.0 if fp + fn == 0 else 0.0
-        
-        metrics['sp_em'] += em
-        metrics['sp_f1'] += f1
-        metrics['sp_prec'] += precision
-        metrics['sp_recall'] += recall
-        
-        return precision, recall, f1
-    
-    def eval_sp(self, indices_golds, indices_preds):
-        
-        metrics = {'sp_em': 0, 'sp_prec': 0, 'sp_recall': 0, 'sp_f1': 0}
-        
-        assert len(indices_golds) == len(indices_preds)
-        
-        for sp_gold, sp_pred in zip(indices_golds, indices_preds):
-            self.update_sp(metrics, sp_gold, sp_pred)
-        
-        N = len(indices_golds)
-        for k in metrics.keys():
-            metrics[k] /= N
-            metrics[k] = round(metrics[k], 3)
-        print(metrics)
+
         return metrics
 
 
