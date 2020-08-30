@@ -126,7 +126,7 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
 
     logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps, evaluate_train_set=True)
 
 
 def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
@@ -197,7 +197,7 @@ class SER_Trainer:
             os.mkdir(trained_model_path)
         self.trained_model_path = trained_model_path
 
-    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1):
+    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1, evaluate_train_set=False):
         
         logger.info("batch_size:{} accumulate_steps:{}".format(batch_size, accumulation_steps))
         param_optimizer = list(self.model.named_parameters())
@@ -262,8 +262,12 @@ class SER_Trainer:
             logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
+            if evaluate_train_set:
+                print("---------------------train set performance----------------------")
+                self.eval(batch_size * 10, self.train_set)
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size*10, self.dev_set)
+
 
             torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss))
             
