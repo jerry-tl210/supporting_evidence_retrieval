@@ -14,6 +14,7 @@ from .preprocess import AttnDataset
 from .nn_models.baseline import BaselineModel
 from .nn_models.attn_aggregate import AttnAggregateModel
 from .nn_models.multiBERTs import MultiBERTsModel
+from .nn_models.attn_aggregate_with_sent_position import AttnAggregateSentPosModel
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     baseline = BaselineModel()
     baseline.load_state_dict(torch.load(
         'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
+    model = AttnAggregateSentPosModel(3, adjust_weight, 100, baseline, transform)
     
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
@@ -228,7 +229,7 @@ def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight,
     model.load_state_dict(new_state_dict)
     '''
     
-    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
+    model = AttnAggregateSentPosModel(3, adjust_weight, 100, baseline, transform)
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
