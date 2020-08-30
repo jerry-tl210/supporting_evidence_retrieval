@@ -67,6 +67,9 @@ def main():
     parser.add_argument('-max_length',
                         type=int,
                         default=512)
+    parser.add_argument('-use_pretrained',
+                        default=False,
+                        action='store_true')
     args = parser.parse_args()
     
     myLogFormat = '%(asctime)s **%(levelname)s** [%(name)s:%(lineno)s] - %(message)s'
@@ -78,10 +81,13 @@ def main():
     else:
         logger.log(100, ' '.join(sys.argv))
 
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load(
-        'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    model = AttnAggregateSentPosModel(args.sentence, baseline)
+    if args.use_pretrained:
+        baseline = BaselineModel()
+        baseline.load_state_dict(torch.load(
+            'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
+        model = AttnAggregateSentPosModel(args.sentence, baseline)
+    else:
+        model = AttnAggregateSentPosModel(args.sentence)
     
     if args.cmd == 'test_train':
         test_train(model, args.lr, args.num_epochs, args.batch_size,
