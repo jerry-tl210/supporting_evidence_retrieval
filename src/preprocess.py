@@ -90,10 +90,10 @@ def data_preprocessing(data, sentence_window, multiBERTs):
             for j in range(s_i - sentence_window // 2, s_i + sentence_window // 2 + 1):
                 if j < 0 or j >= len(documentSentences):
                     sentences.append('[PAD]')
-                    sentence_masks.append([0])
+                    sentence_masks.append(0)
                 else:
                     sentences.append(documentSentences[j])
-                    sentence_masks.append([1])
+                    sentence_masks.append(1)
 
             if s_i in shint:
                 label = [1]

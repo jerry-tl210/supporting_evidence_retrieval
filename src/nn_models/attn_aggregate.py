@@ -11,13 +11,15 @@ logger = logging.getLogger(__name__)
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k) # batch, 3
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)  # batch,1, 3
+    scores = scores.squeeze(1)
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
-    p_attn = F.softmax(scores, dim = -1)
+    attn_weight = F.softmax(scores, dim=-1)
+    p_attn = attn_weight.unsqueeze(1)
     if dropout is not None:
         p_attn = dropout(p_attn)
-    return torch.matmul(p_attn, value), p_attn
+    return torch.matmul(p_attn, value).squeeze(1), attn_weight
 
 
 class AttnAggregateModel(nn.Module):
@@ -45,10 +47,9 @@ class AttnAggregateModel(nn.Module):
         max_sentence_length = batch['input_ids'].shape[2]
 
         input_ids = batch['input_ids'].view(-1, max_sentence_length)
-        device = input_ids.device
         token_type_ids = batch['token_type_ids'].view(-1, max_sentence_length)
         attention_mask = batch['attention_mask'].view(-1, max_sentence_length)
-        sentence_mask = batch['sentence_mask'].type(torch.float)
+        sentence_mask = batch['sentence_mask'].type(torch.float) # (batch, 3)
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                          attention_mask=attention_mask,
                                                          token_type_ids=token_type_ids)
@@ -56,11 +57,11 @@ class AttnAggregateModel(nn.Module):
         pooler_output = pooler_output.view(batch_size, -1, 768)  # (batch, 3, 768)
 
         # Aggregate
-        current_sentence = pooler_output[:, self.number_of_sentence // 2, :]  # (batch, 768)
-        current_sentence = self.current_sentence_transform(current_sentence) # (batch, 768)
+        current_sentence = pooler_output[:, self.number_of_sentence // 2, :].unsqueeze(1)  # (batch, 1, 768)
+        current_sentence = self.current_sentence_transform(current_sentence) # (batch, 1, 768)
         target_sentence = self.target_sentence_transform(pooler_output) # (batch, 3, 768)
         aggregated_sentence, weight = \
-            attention(query=current_sentence, key=target_sentence, value=pooler_output, mask=sentence_mask, dropout=None)
+            attention(current=current_sentence, target=target_sentence, value=pooler_output, mask=sentence_mask, dropout=None)
 
         # concatenated = torch.cat((current_sentence, target_sentence), dim=-1)  # (batch, 3, 768*2)
         # concatenated = self.attn_linear_c(concatenated).tanh()
