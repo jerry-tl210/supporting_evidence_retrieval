@@ -1,5 +1,4 @@
 def update_sp(metrics, sp_gold, sp_pred):
-    assert len(sp_gold) == len(sp_pred)
     tp, fp, fn = 0, 0, 0
     
     for p in sp_pred:
