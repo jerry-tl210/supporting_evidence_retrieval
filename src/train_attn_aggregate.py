@@ -254,9 +254,9 @@ class SER_Trainer:
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-                if (batch_i % batch_eval == 0):
-                    print("current batch loss:", loss.item())
-                    print("total loss:", total_loss)
+                # if (batch_i % batch_eval == 0):
+                #     print("current batch loss:", loss.item())
+                #     print("total loss:", total_loss)
 
             learning_rate_scalar = scheduler.get_lr()[0]
             logger.debug('lr = %f' % learning_rate_scalar)
@@ -267,8 +267,6 @@ class SER_Trainer:
                 self.eval(batch_size * 10, self.train_set)
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size*10, self.dev_set)
-
-
             torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss))
             
 
