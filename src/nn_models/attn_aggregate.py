@@ -78,4 +78,4 @@ class AttnAggregateModel(nn.Module):
         score = torch.sigmoid(logits).cpu()
         predict_label = torch.where(score > threshold, torch.ones(len(score),1), torch.zeros(len(score), 1))
         predict_label = predict_label.numpy().astype(int).tolist()
-        return predict_label, score.numpy().tolist(), weight.numpy().tolist()
+        return predict_label, score.numpy().tolist(), weight.cpu().numpy().tolist()
