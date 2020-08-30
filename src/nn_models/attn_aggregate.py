@@ -8,10 +8,10 @@ from ..std import *
 logger = logging.getLogger(__name__)
 
 
-def attention(query, key, value, mask=None, dropout=None):
+def attention(current, target, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
-    d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)  # batch,1, 3
+    d_k = current.size(-1)
+    scores = torch.matmul(current, target.transpose(-2, -1)) / math.sqrt(d_k)  # batch,1, 3
     scores = scores.squeeze(1)
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
