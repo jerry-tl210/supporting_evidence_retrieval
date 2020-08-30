@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 from transformers import BertModel
@@ -5,6 +6,18 @@ import torch.nn.functional as F
 from ..std import *
 
 logger = logging.getLogger(__name__)
+
+
+def attention(query, key, value, mask=None, dropout=None):
+    "Compute 'Scaled Dot Product Attention'"
+    d_k = query.size(-1)
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k) # batch, 3
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, -1e9)
+    p_attn = F.softmax(scores, dim = -1)
+    if dropout is not None:
+        p_attn = dropout(p_attn)
+    return torch.matmul(p_attn, value), p_attn
 
 
 class AttnAggregateModel(nn.Module):
@@ -23,8 +36,9 @@ class AttnAggregateModel(nn.Module):
             self.current_sentence_transform = nn.Linear(768, 768, bias=False)
             self.target_sentence_transform = nn.Linear(768, 768, bias=False)
 
-        self.weight_dropout = nn.Dropout(0.2)
-        self.weightTransform = nn.Linear(1536, 1, bias=False)
+        self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
+        self.attn_linear_c = nn.Linear(1536, 1536)
+        self.attn_linear_o = nn.Linear(1536, 1, bias=False)
 
     def forward_nn(self, batch):
         batch_size = batch['input_ids'].shape[0]
@@ -38,30 +52,23 @@ class AttnAggregateModel(nn.Module):
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                          attention_mask=attention_mask,
                                                          token_type_ids=token_type_ids)
+        pooler_output = self.dropout(pooler_output)
+        pooler_output = pooler_output.view(batch_size, -1, 768)  # (batch, 3, 768)
 
         # Aggregate
-        pooler_output = pooler_output.view(batch_size, -1, 768)  # (batch, 3, 768)
-        if self.adjust_weight:
-            if hasattr(self, 'current_sentence_transform'):
-                current_sentence = pooler_output[:, self.number_of_sentence // 2, :].unsqueeze(1)  # (batch, 1, 768)
-                current_sentence = self.current_sentence_transform(current_sentence).tanh() # (batch, 1, 768)
-                target_sentence = self.target_sentence_transform(pooler_output).tanh() # (batch, 3, 768)
-                
-            else:
-                current_sentence = pooler_output[:, self.number_of_sentence // 2, :].unsqueeze(1)  # (batch, 1, 768)
-                target_sentence = pooler_output
-                
-            current_sentence = current_sentence.expand(-1, self.number_of_sentence, -1)  # (batch, 3, 768)
-            concatenated = torch.cat((current_sentence, target_sentence), dim=-1)  # (batch, 3, 768*2)
-            concatenated = self.weight_dropout(concatenated) # (batch, 3, 1536)
-            weight = self.weightTransform(concatenated) # (batch, 3, 1)
-            weight = weight + (1.0 - sentence_mask) * -10000
-            weight = F.softmax(weight, dim=1)
-        else:            
-            weight = torch.tensor([[[0.0], [1.0], [0.0]]], device=device)
-            
-        aggregated_sentence = torch.matmul(weight.transpose(1, 2), target_sentence)  # (batch, 1, 768)
-        aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
+        current_sentence = pooler_output[:, self.number_of_sentence // 2, :]  # (batch, 768)
+        current_sentence = self.current_sentence_transform(current_sentence) # (batch, 768)
+        target_sentence = self.target_sentence_transform(pooler_output) # (batch, 3, 768)
+        aggregated_sentence, weight = \
+            attention(query=current_sentence, key=target_sentence, value=pooler_output, mask=sentence_mask, dropout=None)
+
+        # concatenated = torch.cat((current_sentence, target_sentence), dim=-1)  # (batch, 3, 768*2)
+        # concatenated = self.attn_linear_c(concatenated).tanh()
+        # weight = self.attn_linear_o(concatenated) # (batch, 3, 1)
+        # weight = weight + (1.0 - sentence_mask) * -10000
+        # weight = F.softmax(weight, dim=1)
+        # aggregated_sentence = torch.matmul(weight.transpose(1, 2), target_sentence)  # (batch, 1, 768)
+        # aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
         logits = self.sp_linear(aggregated_sentence)  # (batch, 1)
 
         return logits, weight
