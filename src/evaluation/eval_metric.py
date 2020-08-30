@@ -1,4 +1,5 @@
 def update_sp(metrics, sp_gold, sp_pred):
+    assert len(sp_gold) == len(sp_pred)
     tp, fp, fn = 0, 0, 0
     
     for p in sp_pred:
@@ -25,7 +26,8 @@ def update_sp(metrics, sp_gold, sp_pred):
 
 def eval_sp(indices_golds, indices_preds):
     metrics = {'sp_em': 0, 'sp_prec': 0, 'sp_recall': 0, 'sp_f1': 0}
-    
+
+    assert len(indices_golds) != 0
     assert len(indices_golds) == len(indices_preds)
     
     for sp_gold, sp_pred in zip(indices_golds, indices_preds):

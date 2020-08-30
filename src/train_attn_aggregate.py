@@ -16,6 +16,7 @@ from .evaluation.eval_metric import eval_sp
 
 logger = logging.getLogger(__name__)
 
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -79,25 +80,22 @@ def main():
     else:
         logger.log(100, ' '.join(sys.argv))
 
+    baseline = BaselineModel()
+    baseline.load_state_dict(torch.load(
+        'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
+    model = AttnAggregateModel(args.sentence, args.adjust_weight, baseline, args.transform)
+
     if args.cmd == 'test_train':
-        test_train(args.lr, args.num_epochs, args.batch_size, 
-                   args.model_file_name, args.data_type, args.adjust_weight,
-                   args.transform, args.accumulation_steps, args.multiBERTs, 
+        test_train(model, args.lr, args.num_epochs, args.batch_size,
+                   args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
                    args.acc_gradient, args.sentence, args.max_length)
     elif args.cmd == 'train':
-        train(args.lr, args.num_epochs, args.batch_size, 
-              args.model_file_name, args.data_type, args.adjust_weight,
-              args.transform, args.accumulation_steps, args.multiBERTs, 
+        train(model, args.lr, args.num_epochs, args.batch_size, 
+              args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
               args.acc_gradient, args.sentence, args.max_length)
 
     
-def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
-    
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
-    
-
+def test_train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
@@ -129,23 +127,7 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps, evaluate_train_set=True)
 
 
-def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load('Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m')) 
-    
-    '''
-    state_dict = torch.load('Models_SEs/attn_aggregate/model_epoch10_eval_em:0.172_precision:0.524_recall:0.504_f1:0.477_loss:0.002.m')
-    # create new OrderedDict that does not contain `module.`
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:] # remove `module.`
-        new_state_dict[name] = v
-    # load params
-    model.load_state_dict(new_state_dict)
-    '''
-    
-    model = AttnAggregateModel(3, adjust_weight, baseline, transform)
+def train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps, multiBERTs, acc_gradient, sentence, max_length):
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
@@ -268,7 +250,6 @@ class SER_Trainer:
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size*10, self.dev_set)
             torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss))
-            
 
     def eval(self, batch_size, dataset):
         self.model.eval()

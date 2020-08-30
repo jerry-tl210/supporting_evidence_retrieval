@@ -11,7 +11,6 @@ import glob
 from .preprocess import AttnDataset
 
 from .nn_models.baseline import BaselineModel
-from .nn_models.attn_aggregate import AttnAggregateModel
 from .nn_models.attn_aggregate_with_sent_position import AttnAggregateSentPosModel
 
 from .evaluation.eval_metric import eval_sp
@@ -53,9 +52,6 @@ def main():
                         help='output model_file_name')
     parser.add_argument('-data_type',
                         required=True)
-    parser.add_argument('-adjust_weight',
-                        default=False,
-                        action='store_true')
     parser.add_argument('-transform',
                         default=False,
                         action='store_true')
@@ -81,105 +77,26 @@ def main():
         logger.log(100, ' '.join(sys.argv))
     else:
         logger.log(100, ' '.join(sys.argv))
-    
-    if args.cmd == 'test_train':
-        test_train(args.lr, args.num_epochs, args.batch_size,
-                   args.model_file_name, args.data_type, args.adjust_weight,
-                   args.transform, args.accumulation_steps, args.multiBERTs,
-                   args.acc_gradient, args.sentence, args.max_length)
-    elif args.cmd == 'train':
-        train(args.lr, args.num_epochs, args.batch_size,
-              args.model_file_name, args.data_type, args.adjust_weight,
-              args.transform, args.accumulation_steps, args.multiBERTs,
-              args.acc_gradient, args.sentence, args.max_length)
-    elif args.cmd == 'test_train_baseline':
-        test_train_baseline(args.lr, args.num_epochs, args.batch_size,
-                            args.model_file_name, args.data_type, args.adjust_weight,
-                            args.transform, args.accumulation_steps, args.multiBERTs,
-                            args.acc_gradient, args.max_length)
-    elif args.cmd == 'train_baseline':
-        train_baseline(args.lr, args.num_epochs, args.batch_size,
-                       args.model_file_name, args.data_type, args.adjust_weight,
-                       args.transform, args.accumulation_steps, args.multiBERTs,
-                       args.acc_gradient, args.max_length)
 
-
-def test_train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform,
-                        accumulation_steps, multiBERTs, acc_gradient, max_length):
-    model = BaselineModel()
-    
-    logger.info("Indexing train_set ...")
-    if data_type == 'fgc':
-        train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1, max_length, True)
-    if data_type == 'ssqa':
-        train_data = []
-        for filename in glob.glob('*.json'):
-            with open(filename) as json_file:
-                train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data[:10], data_type, multiBERTs, 1, max_length, True)
-    logger.info("train_set has {} instances".format(len(train_set)))
-    
-    logger.info("Indexing dev_set")
-    if data_type == 'fgc':
-        dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1, max_length, True)
-        dev_data = []
-    if data_type == 'ssqa':
-        # Remember to edit the path!
-        for filename in glob.glob('*.json'):
-            with open(filename) as json_file:
-                dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data[:10], data_type, multiBERTs, 1, max_length, True)
-    logger.info("dev_set has {} instances".format(len(dev_set)))
-    
-    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
-    
-    logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
-
-
-def train_baseline(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps,
-                   multiBERTs, acc_gradient, max_length):
-    model = BaselineModel()
-    
-    logger.info("Indexing train_set ...")
-    if data_type == 'fgc':
-        train_data = json_load(config.FGC_TRAIN)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, max_length, True)
-    if data_type == 'ssqa':
-        train_data = []
-        for filename in glob.glob('*.json'):
-            with open(filename) as json_file:
-                train_data = train_data + json.load(json_file)
-        train_set = AttnDataset(train_data, data_type, multiBERTs, 1, max_length, True)
-    logger.info("train_set has {} instances".format(len(train_set)))
-    
-    logger.info("Indexing dev_set")
-    if data_type == 'fgc':
-        dev_data = json_load(config.FGC_DEV)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, max_length, True)
-    if data_type == 'ssqa':
-        dev_data = []
-        # Remember to edit the path!
-        for filename in glob.glob('*.json'):
-            with open(filename) as json_file:
-                dev_data = dev_data + json.load(json_file)
-        dev_set = AttnDataset(dev_data, data_type, multiBERTs, 1, max_length, True)
-    logger.info("dev_set has {} instances".format(len(dev_set)))
-    
-    trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
-    
-    logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
-
-
-def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps,
-               multiBERTs, acc_gradient, sentence, max_length):
     baseline = BaselineModel()
     baseline.load_state_dict(torch.load(
         'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    model = AttnAggregateSentPosModel(3, adjust_weight, 100, baseline, transform)
+    model = AttnAggregateSentPosModel(args.sentence, baseline)
+    
+    if args.cmd == 'test_train':
+        test_train(model, args.lr, args.num_epochs, args.batch_size,
+                   args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
+                   args.acc_gradient, args.sentence, args.max_length)
+    elif args.cmd == 'train':
+        train(model, args.lr, args.num_epochs, args.batch_size,
+              args.model_file_name, args.data_type, args.adjust_weight,
+              args.transform, args.accumulation_steps, args.multiBERTs,
+              args.acc_gradient, args.sentence, args.max_length)
+
+
+def test_train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
+               multiBERTs, acc_gradient, sentence, max_length):
+
     
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
@@ -209,28 +126,11 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_we
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
     
     logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps, evaluate_train_set=True)
 
 
-def train(lr, num_epochs, batch_size, model_file_name, data_type, adjust_weight, transform, accumulation_steps,
+def train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
           multiBERTs, acc_gradient, sentence, max_length):
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load(
-        'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    
-    '''
-    state_dict = torch.load('Models_SEs/attn_aggregate/model_epoch10_eval_em:0.172_precision:0.524_recall:0.504_f1:0.477_loss:0.002.m')
-    # create new OrderedDict that does not contain `module.`
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:] # remove `module.`
-        new_state_dict[name] = v
-    # load params
-    model.load_state_dict(new_state_dict)
-    '''
-    
-    model = AttnAggregateSentPosModel(3, adjust_weight, 100, baseline, transform)
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
@@ -282,7 +182,7 @@ class SER_Trainer:
             os.mkdir(trained_model_path)
         self.trained_model_path = trained_model_path
     
-    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1, show_batch=True):
+    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1, evaluate_train_set=False):
         
         logger.info("batch_size:{} accumulate_steps:{}".format(batch_size, accumulation_steps))
         param_optimizer = list(self.model.named_parameters())
@@ -351,6 +251,9 @@ class SER_Trainer:
             logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
+            if evaluate_train_set:
+                print("---------------------train set performance----------------------")
+                self.eval(batch_size * 10, self.train_set)
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size * 10, self.dev_set)
             
@@ -369,25 +272,18 @@ class SER_Trainer:
                                     shuffle=False, num_workers=batch_size)
             indices_preds = []
             current_document_labels = []
-            weights = []
             for batch in tqdm(dataloader):
                 for key in batch.keys():
                     batch[key] = batch[key].to(self.device)
                 predict_se = self.model.module.predict if hasattr(self.model,
                                                                   'module') else self.model.predict
-                
-                if isinstance(self.model.module, AttnAggregateModel):
-                    weight, current_labels = predict_se(batch)
-                    weights.append(weight)
-                else:
-                    current_labels = predict_se(batch)
+                current_labels, _, _ = predict_se(batch)
                 for label in current_labels:
                     if counter + 1 in cumulative_len:
                         current_document_labels += label
                         current_document_indices = np.where(np.array(current_document_labels) == 1)[0].tolist()
                         indices_preds.append(current_document_indices)
                         current_document_labels = []
-                    
                     else:
                         current_document_labels += label
                     
