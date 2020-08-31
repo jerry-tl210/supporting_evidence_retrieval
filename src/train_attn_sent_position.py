@@ -244,7 +244,8 @@ class SER_Trainer:
             learning_rate_scalar = scheduler.get_lr()[0]
             logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
-            print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
+            print('========================epoch {}============================='.format(epoch_i))
+            print('train_loss: %.3f' % avg_loss)
             if evaluate_train_set:
                 print("---------------------train set performance----------------------")
                 self.eval(batch_size * 10, self.train_set)
@@ -255,6 +256,7 @@ class SER_Trainer:
                        self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(
                            epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'],
                            dev_performance['sp_f1'], avg_loss))
+            print('==============================================================\n')
     
     def eval(self, batch_size, dataset):
         self.model.eval()
