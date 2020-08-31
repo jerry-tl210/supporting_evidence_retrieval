@@ -43,6 +43,7 @@ def main():
                         type=int,
                         help='batch size')
     parser.add_argument('-accumulation_steps',
+                        default=1,
                         type=int)
     parser.add_argument('-model_file_name',
                         required=True,
