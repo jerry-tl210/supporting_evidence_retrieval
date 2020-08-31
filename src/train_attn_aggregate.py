@@ -50,13 +50,7 @@ def main():
                         required=True,
                         help='output model_file_name')
     parser.add_argument('-data_type',
-                        required=True)   
-    parser.add_argument('-adjust_weight',
-                        default=False,
-                        action='store_true')
-    parser.add_argument('-transform',
-                        default=False,
-                        action='store_true')
+                        required=True)
     parser.add_argument('-multiBERTs',
                         default=False,
                         action='store_true')
@@ -69,6 +63,9 @@ def main():
     parser.add_argument('-max_length',
                         type=int,
                         default=512)
+    parser.add_argument('-use_pretrained',
+                        default=False,
+                        action='store_true')
     args = parser.parse_args()
 
     myLogFormat = '%(asctime)s **%(levelname)s** [%(name)s:%(lineno)s] - %(message)s'
@@ -79,11 +76,14 @@ def main():
         logger.log(100, ' '.join(sys.argv))
     else:
         logger.log(100, ' '.join(sys.argv))
-
-    baseline = BaselineModel()
-    baseline.load_state_dict(torch.load(
-        'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
-    model = AttnAggregateModel(args.sentence, args.adjust_weight, baseline, args.transform)
+        
+    if args.use_pretrained:
+        baseline = BaselineModel()
+        baseline.load_state_dict(torch.load(
+            'Models_SEs/baseline/model_epoch11_eval_em:0.172_precision:0.596_recall:0.556_f1:0.529_loss:0.029.m'))
+        model = AttnAggregateModel(args.sentence, baseline)
+    else:
+        model = AttnAggregateModel(args.sentence)
 
     if args.cmd == 'test_train':
         test_train(model, args.lr, args.num_epochs, args.batch_size,
@@ -206,8 +206,7 @@ class SER_Trainer:
                                                         num_train_optimization_steps * self.warmup_proportion),
                                                     num_training_steps=num_train_optimization_steps)
         logger.info("start training loop")
-        
-        batch_eval = 100
+
         for epoch_i in range(num_epochs):
             self.model.train()
             total_loss = 0
@@ -236,21 +235,20 @@ class SER_Trainer:
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-                # if (batch_i % batch_eval == 0):
-                #     print("current batch loss:", loss.item())
-                #     print("total loss:", total_loss)
 
             learning_rate_scalar = scheduler.get_lr()[0]
             logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
-            print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
+            print('========================epoch %d============================='.format(epoch_i))
+            print('train_loss: %.3f' % (avg_loss))
             if evaluate_train_set:
                 print("---------------------train set performance----------------------")
                 self.eval(batch_size * 10, self.train_set)
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size*10, self.dev_set)
             torch.save(self.model.state_dict(), self.trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}_train_loss:{5:.3f}.m".format(epoch_i, dev_performance['sp_em'], dev_performance['sp_prec'], dev_performance['sp_recall'], dev_performance['sp_f1'], avg_loss))
-
+            print('==============================================================\n')
+            
     def eval(self, batch_size, dataset):
         self.model.eval()
         cumulative_len = dataset.cumulative_len

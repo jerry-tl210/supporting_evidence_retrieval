@@ -12,16 +12,9 @@ class BaselineModel(nn.Module):
         self.linear = nn.Linear(768, 1)
 
     def forward_nn(self, batch):
-        # batch['ids'] = (batch_size, 1, sent_len)
-        # batch['segment_ids'] = (batch_size, 1, sent_len)
-        # batch['mask_ids'] = (batch_size, 1, sent_len)
-        # pooler_output = (batch_size, 768)
-        # output = (batch_size, 1)
-
         input_ids = batch['input_ids']# (batch_size, sent_len)
         attention_mask = batch['attention_mask']# (batch_size, sent_len)
         token_type_ids = batch['token_type_ids'] # (batch_size, sent_len)
-        
         hidden_state, pooler_output = self.bert(input_ids=input_ids,
                                                 attention_mask=attention_mask,
                                                 token_type_ids=token_type_ids)

@@ -23,24 +23,19 @@ def attention(current, target, value, mask=None, dropout=None):
 
 
 class AttnAggregateModel(nn.Module):
-    def __init__(self, number_of_sentence, adjust_weight, trained_baseline_model=None, transform=True):
+    def __init__(self, number_of_sentence, trained_baseline_model=None):
         super(AttnAggregateModel, self).__init__()
-        logger.info("self.adjust_weight:{}".format(adjust_weight))
         self.number_of_sentence = number_of_sentence
-        self.adjust_weight = adjust_weight
         if trained_baseline_model:
             self.bert = trained_baseline_model.bert
             self.sp_linear = trained_baseline_model.linear
         else:
             self.bert = BertModel.from_pretrained('bert-base-chinese')
             self.sp_linear = nn.Linear(768, 1)
-        if transform:
-            self.current_sentence_transform = nn.Linear(768, 768, bias=False)
-            self.target_sentence_transform = nn.Linear(768, 768, bias=False)
 
+        self.current_sentence_transform = nn.Linear(768, 768, bias=False)
+        self.target_sentence_transform = nn.Linear(768, 768, bias=False)
         self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
-        self.attn_linear_c = nn.Linear(1536, 1536)
-        self.attn_linear_o = nn.Linear(1536, 1, bias=False)
 
     def forward_nn(self, batch):
         batch_size = batch['input_ids'].shape[0]
@@ -62,14 +57,6 @@ class AttnAggregateModel(nn.Module):
         target_sentence = self.target_sentence_transform(pooler_output) # (batch, 3, 768)
         aggregated_sentence, weight = \
             attention(current=current_sentence, target=target_sentence, value=pooler_output, mask=sentence_mask, dropout=None)
-
-        # concatenated = torch.cat((current_sentence, target_sentence), dim=-1)  # (batch, 3, 768*2)
-        # concatenated = self.attn_linear_c(concatenated).tanh()
-        # weight = self.attn_linear_o(concatenated) # (batch, 3, 1)
-        # weight = weight + (1.0 - sentence_mask) * -10000
-        # weight = F.softmax(weight, dim=1)
-        # aggregated_sentence = torch.matmul(weight.transpose(1, 2), target_sentence)  # (batch, 1, 768)
-        # aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
         logits = self.sp_linear(aggregated_sentence)  # (batch, 1)
         return logits, weight
 
