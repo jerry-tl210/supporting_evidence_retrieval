@@ -52,9 +52,6 @@ def main():
                         help='output model_file_name')
     parser.add_argument('-data_type',
                         required=True)
-    parser.add_argument('-transform',
-                        default=False,
-                        action='store_true')
     parser.add_argument('-multiBERTs',
                         default=False,
                         action='store_true')
@@ -95,15 +92,12 @@ def main():
                    args.acc_gradient, args.sentence, args.max_length)
     elif args.cmd == 'train':
         train(model, args.lr, args.num_epochs, args.batch_size,
-              args.model_file_name, args.data_type, args.adjust_weight,
-              args.transform, args.accumulation_steps, args.multiBERTs,
+              args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
               args.acc_gradient, args.sentence, args.max_length)
 
 
 def test_train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
                multiBERTs, acc_gradient, sentence, max_length):
-
-    
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
