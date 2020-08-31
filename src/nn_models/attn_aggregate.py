@@ -71,7 +71,6 @@ class AttnAggregateModel(nn.Module):
         # aggregated_sentence = torch.matmul(weight.transpose(1, 2), target_sentence)  # (batch, 1, 768)
         # aggregated_sentence = aggregated_sentence.squeeze(1)  # (batch, 768)
         logits = self.sp_linear(aggregated_sentence)  # (batch, 1)
-
         return logits, weight
 
     def forward(self, batch):
