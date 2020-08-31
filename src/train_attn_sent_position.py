@@ -212,15 +212,12 @@ class SER_Trainer:
                                                         num_train_optimization_steps * self.warmup_proportion),
                                                     num_training_steps=num_train_optimization_steps)
         logger.info("start training loop")
-        
-        batch_eval = 100
         for epoch_i in range(num_epochs):
             self.model.train()
             total_loss = 0
             logger.info("train epoch_i:{}".format(epoch_i))
             
             for batch_i, batch in enumerate(tqdm(dataloader_train)):
-                # logger.info('batch_i:{}'.format(batch_i))
                 for t_i, t in batch.items():
                     batch[t_i] = t.to(self.device)
                 
@@ -243,9 +240,6 @@ class SER_Trainer:
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-                if (batch_i % batch_eval == 0):
-                    print("current batch loss:", loss.item())
-                    print("total loss:", total_loss)
             
             learning_rate_scalar = scheduler.get_lr()[0]
             logger.debug('lr = %f' % learning_rate_scalar)
