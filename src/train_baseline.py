@@ -69,21 +69,19 @@ def main():
     else:
         logger.log(100, ' '.join(sys.argv))
 
+    model = BaselineModel()
     if args.cmd == 'test_train':
-        test_train(args.lr, args.num_epochs, args.batch_size,
+        test_train(model, args.lr, args.num_epochs, args.batch_size,
                             args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
                             args.acc_gradient, args.max_length)
     elif args.cmd == 'train':
-        train(args.lr, args.num_epochs, args.batch_size,
-                       args.model_file_name, args.data_type, args.adjust_weight,
-                       args.transform, args.accumulation_steps, args.multiBERTs,
+        train(model, args.lr, args.num_epochs, args.batch_size,
+                       args.model_file_name, args.data_type, args.accumulation_steps, args.multiBERTs,
                        args.acc_gradient, args.max_length)
 
 
-def test_train(lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
+def test_train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
                multiBERTs, acc_gradient, max_length):
-    model = BaselineModel()
-
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
@@ -112,13 +110,11 @@ def test_train(lr, num_epochs, batch_size, model_file_name, data_type, accumulat
     trainer = SER_Trainer(train_set, dev_set, model, lr, model_file_name)
 
     logger.info("Start training ...")
-    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps)
+    trainer.train(num_epochs, batch_size, acc_gradient, accumulation_steps, evaluate_train_set=True)
 
 
-def train(lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
+def train(model, lr, num_epochs, batch_size, model_file_name, data_type, accumulation_steps,
                    multiBERTs, acc_gradient, max_length):
-    model = BaselineModel()
-
     logger.info("Indexing train_set ...")
     if data_type == 'fgc':
         train_data = json_load(config.FGC_TRAIN)
@@ -169,8 +165,7 @@ class SER_Trainer:
             os.mkdir(trained_model_path)
         self.trained_model_path = trained_model_path
 
-    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1):
-
+    def train(self, num_epochs, batch_size, acc_gradient, accumulation_steps=1, evaluate_train_set=False):
         logger.info("batch_size:{} accumulate_steps:{}".format(batch_size, accumulation_steps))
         param_optimizer = list(self.model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -197,14 +192,12 @@ class SER_Trainer:
                                                     num_training_steps=num_train_optimization_steps)
         logger.info("start training loop")
 
-        batch_eval = 100
         for epoch_i in range(num_epochs):
             self.model.train()
             total_loss = 0
             logger.info("train epoch_i:{}".format(epoch_i))
 
             for batch_i, batch in enumerate(tqdm(dataloader_train)):
-                # logger.info('batch_i:{}'.format(batch_i))
                 for t_i, t in batch.items():
                     batch[t_i] = t.to(self.device)
 
@@ -227,13 +220,13 @@ class SER_Trainer:
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-                if (batch_i % batch_eval == 0):
-                    print("current batch loss:", loss.item())
-                    print("total loss:", total_loss)
 
             learning_rate_scalar = scheduler.get_lr()[0]
             logger.debug('lr = %f' % learning_rate_scalar)
             avg_loss = total_loss / len(dataloader_train)
+            if evaluate_train_set:
+                print("---------------------train set performance----------------------")
+                self.eval(batch_size * 10, self.train_set)
             print('epoch %d train_loss: %.3f' % (epoch_i, avg_loss))
             print("---------------------dev set performance----------------------")
             dev_performance = self.eval(batch_size * 10, self.dev_set)
